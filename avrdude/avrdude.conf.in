@@ -1200,6 +1200,12 @@ programmer
 #  miso  = ?;
 #;
 
+programmer
+  id = "linuxspi";
+  desc = "Use Linux SPI device in /sys/class/spidev/spidev*";
+  type = "linuxspi";
+;
+
 # some ultra cheap programmers use bitbanging on the 
 # serialport.
 #
