@@ -25,6 +25,7 @@
 
 #include "avrdude.h"
 #include "avr.h"
+#include "pindefs.h"
 
 #if HAVE_SPIDEV
 
@@ -56,12 +57,23 @@
  * Data for the programmer
  */
 
+struct pdata
+{
+    /**
+     * Port string to open
+     */
+    char* port;
+};
 
+#define PDATA(pgm) ((struct pdata *)(pgm->cookie))
+#define IMPORT_PDATA(pgm) struct pdata *pdata = PDATA(pgm)
 
 /**
  * Function Prototypes
  */
 
+//linuxspi specific functions
+static int linuxspi_open_spi(PROGRAMMER* pgm); //returns a file descriptor or -1
 //interface - management
 static void linuxspi_setup(PROGRAMMER* pgm);
 static void linuxspi_teardown(PROGRAMMER* pgm);
@@ -86,27 +98,152 @@ static int linuxspi_paged_write(PROGRAMMER * pgm, AVRPART * p, AVRMEM * m,
                                   unsigned int addr, unsigned int n_bytes);
 static int linuxspi_set_sck_period(PROGRAMMER *pgm, double sckperiod);
 
+static int linuxspi_open_spi(PROGRAMMER* pgm)
+{
+    int fd = open(pgm->port, O_RDWR);
+    if (fd < 0)
+    {
+        fprintf(stderr, "\n%s: error: Unable to open SPI port %s", progname, pgm->port);
+        return -1; //error
+    }
+    
+    //set mode
+    
+    //set speed
+    
+    //set bits per word
+
+    
+    return fd;
+}
+
 static void linuxspi_setup(PROGRAMMER* pgm)
 {
+    if ((pgm->cookie = malloc(sizeof(struct pdata))) == 0)
+    {
+        fprintf(stderr, "%s: linuxspi_setup(): Unable to allocate private memory.\n", progname);
+        exit(1);
+    }
+    memset(pgm->cookie, 0, sizeof(struct pdata));
 }
 
 static void linuxspi_teardown(PROGRAMMER* pgm)
 {
+    if (PDATA(pgm)->port != 0)
+        free(PDATA(pgm)->port);
+    free(pgm->cookie);
 }
 
 static int linuxspi_open(PROGRAMMER* pgm, char* port)
 {
-    if (strcmp(port, "unknown") == 0) //unknown port
+    if (port == 0 || strcmp(port, "unknown") == 0) //unknown port
     {
         fprintf(stderr, "%s: error: No port specified. Port should point to an SPI interface.\n", progname);
         exit(1);
     }
     
-    return -1;
+    if (pgm->pinno[PIN_AVR_RESET] == 0)
+    {
+        fprintf(stderr, "%s: error: No pin assigned to AVR RESET.\n", progname);
+        exit(1);
+    }
+    
+    // TODO Remove this repetitive code from here and also the close function
+    
+    //export reset pin
+    FILE* f = fopen("/sys/class/gpio/export", "w");
+    if (f == 0)
+    {
+        fprintf(stderr, "%s: error: Failed to open /sys/class/gpio/export", progname);
+        exit(1);
+    }
+    if (fprintf(f, "%d", pgm->pinno[PIN_AVR_RESET]) < 0)
+    {
+        fprintf(stderr, "%s: error: Failed to export GPIO %d", progname, pgm->pinno[PIN_AVR_RESET]);
+        exit(1);
+    }
+    fclose(f);
+    
+    //set reset to output
+    char* buf = malloc(PATH_MAX);
+    if (buf == 0)
+    {
+        fprintf(stderr, "%s: linuxspi_open(): Unable to allocate private memory.\n", progname);
+        exit(1);
+    }
+    sprintf(buf, "/sys/class/gpio/gpio%d/direction", pgm->pinno[PIN_AVR_RESET]);
+    f = fopen(buf, "w");
+    if (f == 0)
+    {
+        fprintf(stderr, "%s: error: Failed to open /sys/class/gpio/gpio%d/direction", progname, pgm->pinno[PIN_AVR_RESET]);
+        exit(1);
+    }
+    if (fprintf(f, "out") < 0)
+    {
+        fprintf(stderr, "%s: error: Failed to set direction on GPIO %d", progname, pgm->pinno[PIN_AVR_RESET]);
+        exit(1);
+    }
+    fclose(f);
+    
+    
+    //set reset low
+    sprintf(buf, "/sys/class/gpio/gpio%d/value", pgm->pinno[PIN_AVR_RESET]);
+    f = fopen(buf, "w");
+    if (f == 0)
+    {
+        fprintf(stderr, "%s: error: Failed to open /sys/class/gpio/gpio%d/value", progname, pgm->pinno[PIN_AVR_RESET]);
+        exit(1);
+    }
+    if (fprintf(f, "0") < 0)
+    {
+        fprintf(stderr, "%s: error: Failed to set value on GPIO %d", progname, pgm->pinno[PIN_AVR_RESET]);
+        exit(1);
+    }
+    fclose(f);
+    
+    free(buf);
+    
+    
+    //save the port to our data
+    strcpy(pgm->port, port);
+    
+    return 0;
 }
 
 static void linuxspi_close(PROGRAMMER* pgm)
 {
+    char* buf = malloc(PATH_MAX);
+    
+    //set reset to input
+    sprintf(buf, "/sys/class/gpio/gpio%d/direction", pgm->pinno[PIN_AVR_RESET]);
+    FILE* f = fopen(buf, "w");
+    if (f == 0)
+    {
+        fprintf(stderr, "%s: error: Failed to open /sys/class/gpio/gpio%d/direction", progname, pgm->pinno[PIN_AVR_RESET]);
+        exit(1);
+    }
+    if (fprintf(f, "in") < 0)
+    {
+        fprintf(stderr, "%s: error: Failed to set direction on GPIO %d", progname, pgm->pinno[PIN_AVR_RESET]);
+        exit(1);
+    }
+    fclose(f);
+    
+    //unexport reset
+    f = fopen("/sys/class/gpio/unexport", "w");
+    if (f == 0)
+    {
+        fprintf(stderr, "%s: error: Failed to open /sys/class/gpio/unexport", progname);
+        exit(1);
+    }
+    if (fprintf(f, "%d", pgm->pinno[PIN_AVR_RESET]) < 0)
+    {
+        fprintf(stderr, "%s: error: Failed to unexport GPIO %d", progname, pgm->pinno[PIN_AVR_RESET]);
+        exit(1);
+    }
+    fclose(f);
+    
+    free(buf);
 }
 
 static void linuxspi_disable(PROGRAMMER* pgm)
@@ -126,12 +263,34 @@ static void linuxspi_display(PROGRAMMER* pgm, const char* p)
 
 static int linuxspi_initialize(PROGRAMMER* pgm, AVRPART* p)
 {
-    return -1;
+    return 0;
 }
 
 static int linuxspi_cmd(PROGRAMMER* pgm, unsigned char cmd[4], unsigned char res[4])
 {
-    return -1;
+    int fd = linuxspi_open_spi(pgm);
+    
+    if (fd < 0)
+        return -1;
+    
+    struct spi_ioc_transfer tr = {
+        .tx_buf = (unsigned long)cmd,
+        .rx_buf = (unsigned long)res,
+        .len = 4,
+        .delay_usecs = 1,
+        .speed_hz = 1000000,
+        .bits_per_word = 8,
+    };
+    
+    if (ioctl(fd, SPI_IOC_MESSAGE(1), &tr) != 4)
+    {
+        fprintf(stderr, "\n%s: error: Unable to send SPI message\n", progname);
+        return -1;
+    }
+    
+    close(fd);
+    
+    return 0;
 }
 
 static int linuxspi_program_enable(PROGRAMMER* pgm, AVRPART* p)
@@ -164,6 +323,8 @@ static int linuxspi_set_sck_period(PROGRAMMER* pgm, double sckperiod)
 void linuxspi_initpgm(PROGRAMMER * pgm)
 {
     strcpy(pgm->type, "linuxspi");
+    
+    pgm_fill_old_pins(pgm); // TODO to be removed if old pin data no longer needed
     
     /*
      * mandatory functions
