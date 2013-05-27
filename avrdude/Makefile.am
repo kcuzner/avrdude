@@ -129,6 +129,8 @@ libavrdude_a_SOURCES = \
 	jtag3_private.h \
 	linuxgpio.c \
 	linuxgpio.h \
+	linuxspi.c \
+	linuxspi.h \
 	linux_ppdev.h \
 	lists.c \
 	lists.h \
