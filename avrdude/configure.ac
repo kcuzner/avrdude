@@ -179,7 +179,12 @@ AC_CHECK_HEADERS([limits.h stdlib.h string.h])
 AC_CHECK_HEADERS([fcntl.h sys/ioctl.h sys/time.h termios.h unistd.h])
 AC_CHECK_HEADERS([ddk/hidsdi.h],,,[#include <windows.h>
 #include <setupapi.h>])
-
+AH_TEMPLATE([HAVE_SPIDEV],
+            [Define if spidev support is enabled for linux])
+AC_CHECK_HEADERS([linux/spi/spidev.h], [have_spidev=yes])
+if test x$have_spidev == xyes; then
+    AC_DEFINE([HAVE_SPIDEV])
+fi
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_C_CONST
@@ -535,5 +540,11 @@ if test x$enabled_linuxgpio = xyes; then
    echo "ENABLED    linuxgpio"
 else
    echo "DISABLED   linuxgpio"
+fi
+
+if test x$have_spidev = xyes; then
+   echo "ENABLED    linuxspi"
+else
+   echo "DISABLED   linnuxspi"
 fi
 
