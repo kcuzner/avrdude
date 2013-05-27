@@ -99,12 +99,9 @@ static int linuxspi_initialize(PROGRAMMER* pgm, AVRPART* p);
 static int linuxspi_cmd(PROGRAMMER * pgm, unsigned char cmd[4], unsigned char res[4]);
 static int linuxspi_program_enable(PROGRAMMER * pgm, AVRPART * p);
 static int linuxspi_chip_erase(PROGRAMMER * pgm, AVRPART * p);
-static int linuxspi_paged_load(PROGRAMMER * pgm, AVRPART * p, AVRMEM * m,
-                                 unsigned int page_size,
-                                 unsigned int addr, unsigned int n_bytes);
-static int linuxspi_paged_write(PROGRAMMER * pgm, AVRPART * p, AVRMEM * m,
+/*static int linuxspi_paged_write(PROGRAMMER * pgm, AVRPART * p, AVRMEM * m,
                                   unsigned int page_size,
-                                  unsigned int addr, unsigned int n_bytes);
+                                  unsigned int addr, unsigned int n_bytes);*/
 static int linuxspi_set_sck_period(PROGRAMMER *pgm, double sckperiod);
 
 /**
@@ -306,6 +303,13 @@ static int linuxspi_initialize(PROGRAMMER* pgm, AVRPART* p)
 {
     int tries, rc;
     
+    if (p->flags & AVRPART_HAS_TPI)
+    {
+        //we do not support tpi..this is a dedicated SPI thing
+        fprintf(stderr, "%s: error: Programmer %s does not support TPI\n", progname, pgm->type);
+        return -1;
+    }
+    
     //enable programming on the part
     tries = 0;
     do
@@ -336,7 +340,8 @@ static int linuxspi_program_enable(PROGRAMMER* pgm, AVRPART* p)
     unsigned char cmd[4];
     unsigned char res[4];
     
-    if (p->op[AVR_OP_PGM_ENABLE] == NULL) {
+    if (p->op[AVR_OP_PGM_ENABLE] == NULL)
+    {
         fprintf(stderr, "%s: error: program enable instruction not defined for part \"%s\"\n", progname, p->desc);
         return -1;
     }
@@ -353,20 +358,30 @@ static int linuxspi_program_enable(PROGRAMMER* pgm, AVRPART* p)
 
 static int linuxspi_chip_erase(PROGRAMMER* pgm, AVRPART* p)
 {
-    return -1;
+    unsigned char cmd[4];
+    unsigned char res[4];
+    
+    if (p->op[AVR_OP_CHIP_ERASE] == NULL)
+    {
+        fprintf(stderr, "%s: error: chip erase instruction not defined for part \"%s\"\n", progname, p->desc);
+        return -1;
+    }
+    
+    memset(cmd, 0, sizeof(cmd));
+
+    avr_set_bits(p->op[AVR_OP_CHIP_ERASE], cmd);
+    pgm->cmd(pgm, cmd, res);
+    usleep(p->chip_erase_delay);
+    pgm->initialize(pgm, p);
+    
+    return 0;
 }
 
-static int linuxspi_paged_load(PROGRAMMER* pgm, AVRPART* p, AVRMEM* m, 
-                               unsigned int page_size, unsigned int addr, unsigned int n_bytes)
-{
-    return -1;
-}
-
-static int linuxspi_paged_write(PROGRAMMER* pgm, AVRPART* p, AVRMEM* m,
+/*static int linuxspi_paged_write(PROGRAMMER* pgm, AVRPART* p, AVRMEM* m,
                                 unsigned int page_size, unsigned int addr, unsigned int n_bytes)
 {
     return -1;
-}
+}*/
 
 static int linuxspi_set_sck_period(PROGRAMMER* pgm, double sckperiod)
 {
@@ -399,8 +414,7 @@ void linuxspi_initpgm(PROGRAMMER * pgm)
      * optional functions
      */
 
-    pgm->paged_write    = linuxspi_paged_write;
-    pgm->paged_load     = linuxspi_paged_load;
+    //pgm->paged_write    = linuxspi_paged_write;
     pgm->setup          = linuxspi_setup;
     pgm->teardown       = linuxspi_teardown;
     pgm->set_sck_period = linuxspi_set_sck_period;
