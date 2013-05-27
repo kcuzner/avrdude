@@ -52,6 +52,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 /**
  * Data for the programmer
@@ -59,10 +60,7 @@
 
 struct pdata
 {
-    /**
-     * Port string to open
-     */
-    char* port;
+    unsigned int speedHz;
 };
 
 typedef enum {
@@ -80,7 +78,6 @@ typedef enum {
  */
 
 //linuxspi specific functions
-static int linuxspi_open_spi(PROGRAMMER* pgm); //returns a file descriptor or -1
 static int linuxspi_spi_duplex(PROGRAMMER* pgm, unsigned char* tx, unsigned char* rx, int len);
 static int linuxspi_gpio_op_wr(PROGRAMMER* pgm, LINUXSPI_GPIO_OP op, int gpio, char* val);
 //interface - management
@@ -99,15 +96,12 @@ static int linuxspi_initialize(PROGRAMMER* pgm, AVRPART* p);
 static int linuxspi_cmd(PROGRAMMER * pgm, unsigned char cmd[4], unsigned char res[4]);
 static int linuxspi_program_enable(PROGRAMMER * pgm, AVRPART * p);
 static int linuxspi_chip_erase(PROGRAMMER * pgm, AVRPART * p);
-/*static int linuxspi_paged_write(PROGRAMMER * pgm, AVRPART * p, AVRMEM * m,
-                                  unsigned int page_size,
-                                  unsigned int addr, unsigned int n_bytes);*/
-static int linuxspi_set_sck_period(PROGRAMMER *pgm, double sckperiod);
 
 /**
- * @brief Opens the SPI port specified in the pgm
+ * @brief Sends/receives a message in full duplex mode
+ * @return -1 on failure, otherwise number of bytes sent/recieved
  */
-static int linuxspi_open_spi(PROGRAMMER* pgm)
+static int linuxspi_spi_duplex(PROGRAMMER* pgm, unsigned char* tx, unsigned char* rx, int len)
 {
     int fd = open(pgm->port, O_RDWR);
     if (fd < 0)
@@ -116,38 +110,18 @@ static int linuxspi_open_spi(PROGRAMMER* pgm)
         return -1; //error
     }
     
-    //set mode
-    
-    //set speed
-    
-    //set bits per word
-
-    
-    return fd;
-}
-
-/**
- * @brief Sends/receives a message in full duplex mode
- * @return -1 on failure, otherwise number of bytes sent/recieved
- */
-static int linuxspi_spi_duplex(PROGRAMMER* pgm, unsigned char* tx, unsigned char* rx, int len)
-{
-    int fd = linuxspi_open_spi(pgm);
-    
-    if (fd < 0)
-        return -1;
-    
     struct spi_ioc_transfer tr = {
         .tx_buf = (unsigned long)tx,
         .rx_buf = (unsigned long)rx,
         .len = len,
         .delay_usecs = 1,
-        .speed_hz = 500000,
+        .speed_hz = 500000, //should settle around 400Khz, a standard SPI speed
         .bits_per_word = 8,
     };
     
     int ret = ioctl(fd, SPI_IOC_MESSAGE(1), &tr);
     close(fd);
+    
     if (ret != len)
     {
         fprintf(stderr, "\n%s: error: Unable to send SPI message\n", progname);
@@ -220,8 +194,6 @@ static void linuxspi_setup(PROGRAMMER* pgm)
 
 static void linuxspi_teardown(PROGRAMMER* pgm)
 {
-    if (PDATA(pgm)->port != 0)
-        free(PDATA(pgm)->port);
     free(pgm->cookie);
 }
 
@@ -240,8 +212,6 @@ static int linuxspi_open(PROGRAMMER* pgm, char* port)
         fprintf(stderr, "%s: error: No pin assigned to AVR RESET.\n", progname);
         exit(1);
     }
-    
-    // TODO Remove this repetitive code from here and also the close function
     
     //export reset pin
     buf = malloc(32);
@@ -264,7 +234,7 @@ static int linuxspi_open(PROGRAMMER* pgm, char* port)
     {
         return -1;
     }
-    
+        
     //save the port to our data
     strcpy(pgm->port, port);
     
@@ -377,17 +347,6 @@ static int linuxspi_chip_erase(PROGRAMMER* pgm, AVRPART* p)
     return 0;
 }
 
-/*static int linuxspi_paged_write(PROGRAMMER* pgm, AVRPART* p, AVRMEM* m,
-                                unsigned int page_size, unsigned int addr, unsigned int n_bytes)
-{
-    return -1;
-}*/
-
-static int linuxspi_set_sck_period(PROGRAMMER* pgm, double sckperiod)
-{
-    return -1;
-}
-
 void linuxspi_initpgm(PROGRAMMER * pgm)
 {
     strcpy(pgm->type, "linuxspi");
@@ -413,11 +372,8 @@ void linuxspi_initpgm(PROGRAMMER * pgm)
     /*
      * optional functions
      */
-
-    //pgm->paged_write    = linuxspi_paged_write;
     pgm->setup          = linuxspi_setup;
     pgm->teardown       = linuxspi_teardown;
-    pgm->set_sck_period = linuxspi_set_sck_period;
 }
 
 const char linuxspi_desc[] = "SPI using Linux spidev driver";
