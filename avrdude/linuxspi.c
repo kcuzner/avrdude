@@ -74,6 +74,7 @@ struct pdata
 
 //linuxspi specific functions
 static int linuxspi_open_spi(PROGRAMMER* pgm); //returns a file descriptor or -1
+static int linuxspi_spi_duplex(PROGRAMMER* pgm, unsigned char* tx, unsigned char* rx, int len);
 //interface - management
 static void linuxspi_setup(PROGRAMMER* pgm);
 static void linuxspi_teardown(PROGRAMMER* pgm);
@@ -98,6 +99,9 @@ static int linuxspi_paged_write(PROGRAMMER * pgm, AVRPART * p, AVRMEM * m,
                                   unsigned int addr, unsigned int n_bytes);
 static int linuxspi_set_sck_period(PROGRAMMER *pgm, double sckperiod);
 
+/**
+ * @brief Opens the SPI port specified in the pgm
+ */
 static int linuxspi_open_spi(PROGRAMMER* pgm)
 {
     int fd = open(pgm->port, O_RDWR);
@@ -115,6 +119,37 @@ static int linuxspi_open_spi(PROGRAMMER* pgm)
 
     
     return fd;
+}
+
+/**
+ * @brief Sends/receives a message in full duplex mode
+ * @return -1 on failure, otherwise number of bytes sent/recieved
+ */
+static int linuxspi_spi_duplex(PROGRAMMER* pgm, unsigned char* tx, unsigned char* rx, int len)
+{
+    int fd = linuxspi_open_spi(pgm);
+    
+    if (fd < 0)
+        return -1;
+    
+    struct spi_ioc_transfer tr = {
+        .tx_buf = (unsigned long)tx,
+        .rx_buf = (unsigned long)rx,
+        .len = len,
+        .delay_usecs = 1,
+        .speed_hz = 500000,
+        .bits_per_word = 8,
+    };
+    
+    int ret = ioctl(fd, SPI_IOC_MESSAGE(1), &tr);
+    close(fd);
+    if (ret != len)
+    {
+        fprintf(stderr, "\n%s: error: Unable to send SPI message\n", progname);
+        return -1;
+    }
+    
+    return ret;
 }
 
 static void linuxspi_setup(PROGRAMMER* pgm)
@@ -263,39 +298,51 @@ static void linuxspi_display(PROGRAMMER* pgm, const char* p)
 
 static int linuxspi_initialize(PROGRAMMER* pgm, AVRPART* p)
 {
+    int tries, rc;
+    
+    //enable programming on the part
+    tries = 0;
+    do
+    {
+        rc = pgm->program_enable(pgm, p);
+        if (rc == 0 || rc == -1)
+            break;
+        tries++;
+    }
+    while(tries < 65);
+    
+    if (rc)
+    {
+        fprintf(stderr, "%s: error: AVR device not responding\n", progname);
+        return -1;
+    }
+    
     return 0;
 }
 
 static int linuxspi_cmd(PROGRAMMER* pgm, unsigned char cmd[4], unsigned char res[4])
 {
-    int fd = linuxspi_open_spi(pgm);
-    
-    if (fd < 0)
-        return -1;
-    
-    struct spi_ioc_transfer tr = {
-        .tx_buf = (unsigned long)cmd,
-        .rx_buf = (unsigned long)res,
-        .len = 4,
-        .delay_usecs = 1,
-        .speed_hz = 1000000,
-        .bits_per_word = 8,
-    };
-    
-    if (ioctl(fd, SPI_IOC_MESSAGE(1), &tr) != 4)
-    {
-        fprintf(stderr, "\n%s: error: Unable to send SPI message\n", progname);
-        return -1;
-    }
-    
-    close(fd);
-    
-    return 0;
+    return linuxspi_spi_duplex(pgm, cmd, res, 4);
 }
 
 static int linuxspi_program_enable(PROGRAMMER* pgm, AVRPART* p)
 {
-    return -1;
+    unsigned char cmd[4];
+    unsigned char res[4];
+    
+    if (p->op[AVR_OP_PGM_ENABLE] == NULL) {
+        fprintf(stderr, "%s: error: program enable instruction not defined for part \"%s\"\n", progname, p->desc);
+        return -1;
+    }
+    
+    memset(cmd, 0, sizeof(cmd));
+    avr_set_bits(p->op[AVR_OP_PGM_ENABLE], cmd); //set the cmd
+    pgm->cmd(pgm, cmd, res);
+    
+    if (res[2] != cmd[1])
+        return -2;
+    
+    return 0;
 }
 
 static int linuxspi_chip_erase(PROGRAMMER* pgm, AVRPART* p)
