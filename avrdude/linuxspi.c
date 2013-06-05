@@ -1,8 +1,8 @@
 /*
  * avrdude - A Downloader/Uploader for AVR device programmers
- * Support for bitbanging GPIO pins using the /sys/class/gpio interface
+ * Support for using spidev userspace drivers to communicate directly over SPI
  * 
- * Copyright (C) 2013 Radoslav Kolev <radoslav@kolev.info>
+ * Copyright (C) 2013 Kevin Cuzner <kevin@kevincuzner.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
