@@ -115,7 +115,8 @@ static int linuxspi_spi_duplex(PROGRAMMER* pgm, unsigned char* tx, unsigned char
         .rx_buf = (unsigned long)rx,
         .len = len,
         .delay_usecs = 1,
-        .speed_hz = 500000, //should settle around 400Khz, a standard SPI speed
+        //should settle around 400Khz, a standard SPI speed. Adjust using baud parameter (-b)
+	.speed_hz = pgm->baudrate==0?400000:pgm->baudrate,
         .bits_per_word = 8,
     };
     
