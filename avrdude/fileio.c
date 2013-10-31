@@ -372,12 +372,22 @@ static int ihex2b(char * infile, FILE * inf,
 
   } /* while */
 
-  fprintf(stderr, 
-          "%s: WARNING: no end of file record found for Intel Hex "
-          "file \"%s\"\n",
-          progname, infile);
+  if (maxaddr == 0) {
+    fprintf(stderr, 
+	    "%s: ERROR: No valid record found in Intel Hex "
+	    "file \"%s\"\n",
+	    progname, infile);
 
-  return maxaddr;
+    return -1;
+  }
+  else {
+    fprintf(stderr, 
+	    "%s: WARNING: no end of file record found for Intel Hex "
+	    "file \"%s\"\n",
+	    progname, infile);
+
+    return maxaddr;
+  }
 }
 
 static int b2srec(unsigned char * inbuf, int bufsize, 
@@ -944,7 +954,7 @@ static int elf2b(char * infile, FILE * inf,
   }
 
   size_t sndx;
-  if (elf_getshstrndx(e, &sndx) != 0) {
+  if (elf_getshdrstrndx(e, &sndx) != 0) {
     fprintf(stderr,
             "%s: ERROR: Error obtaining section name string table: %s\n",
             progname, elf_errmsg(-1));
@@ -1023,8 +1033,8 @@ static int elf2b(char * infile, FILE * inf,
       while ((d = elf_getdata(s, d)) != NULL) {
         if (verbose >= 2) {
           fprintf(stderr,
-                  "    Data block: d_buf 0x%x, d_off 0x%x, d_size %d\n",
-                  (unsigned int)d->d_buf, (unsigned int)d->d_off, d->d_size);
+                  "    Data block: d_buf %p, d_off 0x%x, d_size %d\n",
+                  d->d_buf, (unsigned int)d->d_off, d->d_size);
         }
         if (mem->size == 1) {
           if (d->d_off != 0) {
@@ -1532,9 +1542,9 @@ int fileio(int op, char * filename, FILEFMT format,
     if (using_stdio) {
       fprintf(stderr, 
               "%s: can't auto detect file format when using stdin/out.\n"
-              "     Please specify a file format using the -f option and try again.\n", 
-              progname);
-      exit(1);
+              "%s  Please specify a file format and try again.\n", 
+              progname, progbuf);
+      return -1;
     }
 
     format = fmt_autodetect(fname);

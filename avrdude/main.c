@@ -82,7 +82,6 @@ static PROGRAMMER * pgm;
 /*
  * global options
  */
-int    do_cycles;   /* track erase-rewrite cycles */
 int    verbose;     /* verbose output */
 int    quell_progress; /* un-verebose output */
 int    ovsigck;     /* 1=override sig check, 0=don't */
@@ -323,8 +322,6 @@ int main(int argc, char * argv [])
   char  * partdesc;    /* part id */
   char    sys_config[PATH_MAX]; /* system wide config file */
   char    usr_config[PATH_MAX]; /* per-user config file */
-  int     cycles;      /* erase-rewrite cycles */
-  int     set_cycles;  /* value to set the erase-rewrite cycles to */
   char  * e;           /* for strtol() error checking */
   int     baudrate;    /* override default programmer baud rate */
   double  bitclock;    /* Specify programmer bit clock (JTAG ICE) */
@@ -369,6 +366,7 @@ int main(int argc, char * argv [])
   default_parallel[0] = 0;
   default_serial[0]   = 0;
   default_bitclock    = 0.0;
+  default_safemode    = -1;
 
   init_config();
 
@@ -405,8 +403,6 @@ int main(int argc, char * argv [])
   pgm           = NULL;
   programmer    = default_programmer;
   verbose       = 0;
-  do_cycles     = 0;
-  set_cycles    = -1;
   baudrate      = 0;
   bitclock      = 0.0;
   ispdelay      = 0;
@@ -414,11 +410,6 @@ int main(int argc, char * argv [])
   silentsafe    = 0;       /* Ask by default */
   is_open       = 0;
   logfile       = NULL;
-
-  if (isatty(STDIN_FILENO) == 0)
-      safemode  = 0;       /* Turn off safemode if this isn't a terminal */
-
-
 
 #if defined(WIN32NATIVE)
 
@@ -588,17 +579,13 @@ int main(int argc, char * argv [])
         break;
 
       case 'y':
-        do_cycles = 1;
+        fprintf(stderr, "%s: erase cycle counter no longer supported\n",
+                progname);
         break;
 
       case 'Y':
-        set_cycles = strtol(optarg, &e, 0);
-        if ((e == optarg) || (*e != 0)) {
-          fprintf(stderr, "%s: invalid cycle count '%s'\n",
-                  progname, optarg);
-          exit(1);
-        }
-        do_cycles = 1;
+        fprintf(stderr, "%s: erase cycle counter no longer supported\n",
+                progname);
         break;
 
       case '?': /* help */
@@ -853,6 +840,20 @@ int main(int argc, char * argv [])
       exit(1);
     }
   }
+
+  if (default_safemode == 0) {
+    /* configuration disables safemode: revert meaning of -u */
+    if (safemode == 0)
+      /* -u was given: enable safemode */
+      safemode = 1;
+    else
+      /* -u not given: turn off */
+      safemode = 0;
+  }
+
+  if (isatty(STDIN_FILENO) == 0 && silentsafe == 0)
+    safemode  = 0;       /* Turn off safemode if this isn't a terminal */
+
 
   if(p->flags & AVRPART_AVR32) {
     safemode = 0;
@@ -1155,6 +1156,8 @@ int main(int argc, char * argv [])
     } else {
       AVRMEM * m;
       const char *memname = (p->flags & AVRPART_HAS_PDI)? "application": "flash";
+
+      uflags &= ~UF_AUTO_ERASE;
       for (ln=lfirst(updates); ln; ln=lnext(ln)) {
         upd = ldata(ln);
         m = avr_locate_mem(p, upd->memtype);
@@ -1162,7 +1165,6 @@ int main(int argc, char * argv [])
           continue;
         if ((strcasecmp(m->desc, memname) == 0) && (upd->op == DEVICE_WRITE)) {
           erase = 1;
-          uflags &= ~UF_AUTO_ERASE;
           if (quell_progress < 2) {
             fprintf(stderr,
                     "%s: NOTE: \"%s\" memory has been specified, an erase cycle "
@@ -1172,48 +1174,6 @@ int main(int argc, char * argv [])
           }
           break;
         }
-      }
-    }
-  }
-
-  /*
-   * Display cycle count, if and only if it is not set later on.
-   *
-   * The cycle count will be displayed anytime it will be changed later.
-   */
-  if (init_ok && !(p->flags & AVRPART_AVR32) && do_cycles) {
-    /*
-     * see if the cycle count in the last four bytes of eeprom seems
-     * reasonable
-     */
-    rc = avr_get_cycle_count(pgm, p, &cycles);
-    if (quell_progress < 2) {
-      if ((rc >= 0) && (cycles != 0)) {
-        fprintf(stderr,
-              "%s: current erase-rewrite cycle count is %d\n",
-              progname, cycles);
-      }
-    }
-  }
-
-  if (init_ok && set_cycles != -1 && !(p->flags & AVRPART_AVR32)) {
-    rc = avr_get_cycle_count(pgm, p, &cycles);
-    if (rc == 0) {
-      /*
-       * only attempt to update the cycle counter if we can actually
-       * read the old value
-       */
-      cycles = set_cycles;
-      if (quell_progress < 2) {
-        fprintf(stderr, "%s: setting erase-rewrite cycle count to %d\n",
-              progname, cycles);
-      }
-      rc = avr_put_cycle_count(pgm, p, cycles);
-      if (rc < 0) {
-        fprintf(stderr,
-                "%s: WARNING: failed to update the erase-rewrite cycle "
-                "counter\n",
-                progname);
       }
     }
   }
@@ -1404,7 +1364,8 @@ int main(int argc, char * argv [])
     if (quell_progress < 2) {
       fprintf(stderr, "%s: safemode: ", progname);
       if (failures == 0) {
-        fprintf(stderr, "Fuses OK\n");
+        fprintf(stderr, "Fuses OK (E:%02X, H:%02X, L:%02X)\n",
+                safemode_efuse, safemode_hfuse, safemode_lfuse);
       }
       else {
         fprintf(stderr, "Fuses not recovered, sorry\n");

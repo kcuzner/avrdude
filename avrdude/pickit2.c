@@ -49,6 +49,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <inttypes.h>
+#include <unistd.h>
 
 #include "avrdude.h"
 #include "avr.h"
@@ -741,15 +742,15 @@ static int  pickit2_paged_write(PROGRAMMER * pgm, AVRPART * p, AVRMEM * mem,
 }
 
 
-static int pickit2_cmd(struct programmer_t * pgm, unsigned char cmd[4],
-                unsigned char res[4])
+static int pickit2_cmd(struct programmer_t * pgm, const unsigned char *cmd,
+                unsigned char *res)
 {
     return pgm->spi(pgm, cmd, res, 4);
 }
 
 // breaks up the cmd[] data into  packets & sends to the pickit2. Data shifted in is stored in res[].
-static int pickit2_spi(struct programmer_t * pgm, unsigned char cmd[],
-                unsigned char res[], int n_bytes)
+static int pickit2_spi(struct programmer_t * pgm, const unsigned char *cmd,
+                unsigned char *res, int n_bytes)
 {
     int retval = 0, temp1 = 0, temp2 = 0, count = n_bytes;
 
@@ -1167,7 +1168,7 @@ static int usb_open_device(struct usb_dev_handle **device, int vendor, int produ
                 {
                     if (verbose)
                     {
-                        fprintf(stderr, "Device 0x%4.4X seemed to open OK.\n", (int)handle);
+                        fprintf(stderr, "Device %p seemed to open OK.\n", handle);
                     }
 
                     if ((errorCode = usb_set_configuration(handle, 1)) < 0)

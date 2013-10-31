@@ -131,7 +131,9 @@ struct pdata
 static void usbasp_setup(PROGRAMMER * pgm);
 static void usbasp_teardown(PROGRAMMER * pgm);
 // internal functions
-static int usbasp_transmit(PROGRAMMER * pgm, unsigned char receive, unsigned char functionid, unsigned char send[4], unsigned char * buffer, int buffersize);
+static int usbasp_transmit(PROGRAMMER * pgm, unsigned char receive,
+			   unsigned char functionid, const unsigned char *send,
+			   unsigned char *buffer, int buffersize);
 #ifdef USE_LIBUSB_1_0
 static int usbOpenDevice(libusb_device_handle **device, int vendor, char *vendorName, int product, char *productName);
 #else
@@ -147,7 +149,7 @@ static void usbasp_display(PROGRAMMER * pgm, const char * p);
 // universal functions
 static int usbasp_initialize(PROGRAMMER * pgm, AVRPART * p);
 // SPI specific functions
-static int usbasp_spi_cmd(PROGRAMMER * pgm, unsigned char cmd[4], unsigned char res[4]);
+static int usbasp_spi_cmd(PROGRAMMER * pgm, const unsigned char *cmd, unsigned char *res);
 static int usbasp_spi_program_enable(PROGRAMMER * pgm, AVRPART * p);
 static int usbasp_spi_chip_erase(PROGRAMMER * pgm, AVRPART * p);
 static int usbasp_spi_paged_load(PROGRAMMER * pgm, AVRPART * p, AVRMEM * m,
@@ -159,7 +161,7 @@ static int usbasp_spi_paged_write(PROGRAMMER * pgm, AVRPART * p, AVRMEM * m,
 static int usbasp_spi_set_sck_period(PROGRAMMER *pgm, double sckperiod);
 // TPI specific functions
 static void usbasp_tpi_send_byte(PROGRAMMER * pgm, uint8_t b);
-static int usbasp_tpi_cmd(PROGRAMMER * pgm, unsigned char cmd[4], unsigned char res[4]);
+static int usbasp_tpi_cmd(PROGRAMMER * pgm, const unsigned char *cmd, unsigned char *res);
 static int usbasp_tpi_program_enable(PROGRAMMER * pgm, AVRPART * p);
 static int usbasp_tpi_chip_erase(PROGRAMMER * pgm, AVRPART * p);
 static int usbasp_tpi_paged_load(PROGRAMMER * pgm, AVRPART * p, AVRMEM * m,
@@ -191,14 +193,55 @@ static void usbasp_teardown(PROGRAMMER * pgm)
 }
 
 /* Internal functions */
+
+static const char *usbasp_get_funcname(unsigned char functionid)
+{
+  switch (functionid) {
+  case USBASP_FUNC_CONNECT:         return "USBASP_FUNC_CONNECT";         break;
+  case USBASP_FUNC_DISCONNECT:      return "USBASP_FUNC_DISCONNECT";      break;
+  case USBASP_FUNC_TRANSMIT:        return "USBASP_FUNC_TRANSMIT";        break;
+  case USBASP_FUNC_READFLASH:       return "USBASP_FUNC_READFLASH";       break;
+  case USBASP_FUNC_ENABLEPROG:      return "USBASP_FUNC_ENABLEPROG";      break;
+  case USBASP_FUNC_WRITEFLASH:      return "USBASP_FUNC_WRITEFLASH";      break;
+  case USBASP_FUNC_READEEPROM:      return "USBASP_FUNC_READEEPROM";      break;
+  case USBASP_FUNC_WRITEEEPROM:     return "USBASP_FUNC_WRITEEEPROM";     break;
+  case USBASP_FUNC_SETLONGADDRESS:  return "USBASP_FUNC_SETLONGADDRESS";  break;
+  case USBASP_FUNC_SETISPSCK:       return "USBASP_FUNC_SETISPSCK";       break;
+  case USBASP_FUNC_TPI_CONNECT:     return "USBASP_FUNC_TPI_CONNECT";     break;
+  case USBASP_FUNC_TPI_DISCONNECT:  return "USBASP_FUNC_TPI_DISCONNECT";  break;
+  case USBASP_FUNC_TPI_RAWREAD:     return "USBASP_FUNC_TPI_RAWREAD";     break;
+  case USBASP_FUNC_TPI_RAWWRITE:    return "USBASP_FUNC_TPI_RAWWRITE";    break;
+  case USBASP_FUNC_TPI_READBLOCK:   return "USBASP_FUNC_TPI_READBLOCK";   break;
+  case USBASP_FUNC_TPI_WRITEBLOCK:  return "USBASP_FUNC_TPI_WRITEBLOCK";  break;
+  case USBASP_FUNC_GETCAPABILITIES: return "USBASP_FUNC_GETCAPABILITIES"; break;
+  default:                          return "Unknown USBASP function";     break;
+  }
+}
+
 /*
  * wrapper for usb_control_msg call
  */
 static int usbasp_transmit(PROGRAMMER * pgm,
 			   unsigned char receive, unsigned char functionid,
-			   unsigned char send[4], unsigned char * buffer, int buffersize)
+			   const unsigned char *send,
+			   unsigned char *buffer, int buffersize)
 {
   int nbytes;
+
+  if (verbose > 3) {
+    fprintf(stderr,
+	    "%s: usbasp_transmit(\"%s\", 0x%02x, 0x%02x, 0x%02x, 0x%02x)\n",
+	    progname,
+	    usbasp_get_funcname(functionid), send[0], send[1], send[2], send[3]);
+    if (!receive && buffersize > 0) {
+      int i;
+      fprintf(stderr, "%s => ", progbuf);
+      for (i = 0; i < buffersize; i++)
+	fprintf(stderr, "[%02x] ", buffer[i]);
+      fprintf(stderr, "\n");
+    }
+  }
+
 #ifdef USE_LIBUSB_1_0
   nbytes = libusb_control_transfer(PDATA(pgm)->usbhandle,
 				   (LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_DEVICE | (receive << 7)) & 0xff,
@@ -225,6 +268,15 @@ static int usbasp_transmit(PROGRAMMER * pgm,
     return -1;
   }
 #endif
+
+  if (verbose > 3 && receive && nbytes > 0) {
+    int i;
+    fprintf(stderr, "%s<= ", progbuf);
+    for (i = 0; i < nbytes; i++)
+      fprintf(stderr, "[%02x] ", buffer[i]);
+    fprintf(stderr, "\n");
+  }
+
   return nbytes;
 }
 
@@ -407,6 +459,10 @@ static int           didUsbInit = 0;
 /* Interface - prog. */
 static int usbasp_open(PROGRAMMER * pgm, char * port)
 {
+  if (verbose > 2)
+    fprintf(stderr, "%s: usbasp_open(\"%s\")\n",
+	    progname, port);
+
   /* usb_init will be done in usbOpenDevice */
   if (usbOpenDevice(&PDATA(pgm)->usbhandle, pgm->usbvid, pgm->usbvendor,
 		  pgm->usbpid, pgm->usbproduct) != 0) {
@@ -460,6 +516,9 @@ static int usbasp_open(PROGRAMMER * pgm, char * port)
 
 static void usbasp_close(PROGRAMMER * pgm)
 {
+  if (verbose > 2)
+    fprintf(stderr, "%s: usbasp_close()\n", progname);
+
   if (PDATA(pgm)->usbhandle!=NULL) {
     unsigned char temp[4];
     memset(temp, 0, sizeof(temp));
@@ -512,6 +571,8 @@ static int usbasp_initialize(PROGRAMMER * pgm, AVRPART * p)
   unsigned char res[4];
   IMPORT_PDATA(pgm);
 
+  if (verbose > 2)
+    fprintf(stderr, "%s: usbasp_initialize()\n", progname);
 
   /* get capabilities */
   memset(temp, 0, sizeof(temp));
@@ -572,18 +633,30 @@ static int usbasp_initialize(PROGRAMMER * pgm, AVRPART * p)
 }
 
 /* SPI specific functions */
-static int usbasp_spi_cmd(PROGRAMMER * pgm, unsigned char cmd[4],
-                   unsigned char res[4])
+static int usbasp_spi_cmd(PROGRAMMER * pgm, const unsigned char *cmd,
+                   unsigned char *res)
 {
-  /* Do not use 'sizeof(res)'. => message from cppcheck:
-     Using sizeof for array given as function argument returns the size of pointer. */
+  if (verbose > 2)
+    fprintf(stderr, "%s: usbasp_cpi_cmd(0x%02x, 0x%02x, 0x%02x, 0x%02x)%s",
+	    progname, cmd[0], cmd[1], cmd[2], cmd[3],
+	    verbose > 3? "...\n": "");
+
   int nbytes =
     usbasp_transmit(pgm, 1, USBASP_FUNC_TRANSMIT, cmd, res, 4);
 
   if(nbytes != 4){
+    if (verbose == 3)
+      putc('\n', stderr);
+
     fprintf(stderr, "%s: error: wrong responds size\n",
 	    progname);
     return -1;
+  }
+  if (verbose > 2) {
+    if (verbose > 3)
+      fprintf(stderr, "%s: usbasp_cpi_cmd()", progname);
+    fprintf(stderr, " => 0x%02x, 0x%02x, 0x%02x, 0x%02x\n",
+	    res[0], res[1], res[2], res[3]);
   }
 
   return 0;
@@ -597,6 +670,10 @@ static int usbasp_spi_program_enable(PROGRAMMER * pgm, AVRPART * p)
   memset(res, 0, sizeof(res));
 
   cmd[0] = 0;
+
+  if (verbose > 2)
+    fprintf(stderr, "%s: usbasp_program_enable()\n",
+	    progname);
 
   int nbytes =
     usbasp_transmit(pgm, 1, USBASP_FUNC_ENABLEPROG, cmd, res, sizeof(res));
@@ -614,6 +691,10 @@ static int usbasp_spi_chip_erase(PROGRAMMER * pgm, AVRPART * p)
 {
   unsigned char cmd[4];
   unsigned char res[4];
+
+  if (verbose > 2)
+    fprintf(stderr, "%s: usbasp_chip_erase()\n",
+	    progname);
 
   if (p->op[AVR_OP_CHIP_ERASE] == NULL) {
     fprintf(stderr, "chip erase instruction not defined for part \"%s\"\n",
@@ -641,6 +722,11 @@ static int usbasp_spi_paged_load(PROGRAMMER * pgm, AVRPART * p, AVRMEM * m,
   int blocksize;
   unsigned char *buffer = m->buf + address;
   int function;
+
+  if (verbose > 2)
+    fprintf(stderr,
+	    "%s: usbasp_program_paged_load(\"%s\", 0x%x, %d)\n",
+	    progname, m->desc, address, n_bytes);
 
   if (strcmp(m->desc, "flash") == 0) {
     function = USBASP_FUNC_READFLASH;
@@ -706,6 +792,11 @@ static int usbasp_spi_paged_write(PROGRAMMER * pgm, AVRPART * p, AVRMEM * m,
   unsigned char *buffer = m->buf + address;
   unsigned char blockflags = USBASP_BLOCKFLAG_FIRST;
   int function;
+
+  if (verbose > 2)
+    fprintf(stderr,
+	    "%s: usbasp_program_paged_write(\"%s\", 0x%x, %d)\n",
+	    progname, m->desc, address, n_bytes);
 
   if (strcmp(m->desc, "flash") == 0) {
     function = USBASP_FUNC_WRITEFLASH;
@@ -791,6 +882,11 @@ static int usbasp_spi_set_sck_period(PROGRAMMER *pgm, double sckperiod)
   char clockoption = USBASP_ISP_SCK_AUTO;
   unsigned char res[4];
   unsigned char cmd[4];
+
+  if (verbose > 2)
+    fprintf(stderr,
+	    "%s: usbasp_spi_set_sck_period(%g)\n",
+	    progname, sckperiod);
 
   memset(cmd, 0, sizeof(cmd));
   memset(res, 0, sizeof(res));
@@ -879,18 +975,28 @@ static int usbasp_tpi_nvm_waitbusy(PROGRAMMER * pgm)
 {
   int retry;
 
+  if (verbose > 2)
+    fprintf(stderr, "%s: usbasp_tpi_nvm_waitbusy() ...", progname);
 
   for(retry=50; retry>0; retry--)
   {
     usbasp_tpi_send_byte(pgm, TPI_OP_SIN(NVMCSR));
     if(usbasp_tpi_recv_byte(pgm) & NVMCSR_BSY)
       continue;
+
+    if (verbose > 2)
+      fprintf(stderr, " ready\n");
+
     return 0;
   }
+
+  if (verbose > 2)
+    fprintf(stderr, " failure\n");
+
   return -1;
 }
 
-static int usbasp_tpi_cmd(PROGRAMMER * pgm, unsigned char cmd[4], unsigned char res[4])
+static int usbasp_tpi_cmd(PROGRAMMER * pgm, const unsigned char *cmd, unsigned char *res)
 {
   fprintf(stderr, "%s: error: spi_cmd used in TPI mode: not allowed\n", progname);
   return -1;
@@ -900,7 +1006,9 @@ static int usbasp_tpi_program_enable(PROGRAMMER * pgm, AVRPART * p)
 {
   int retry;
 
-  
+  if (verbose > 2)
+    fprintf(stderr, "%s: usbasp_tpi_program_enable()\n", progname);
+
   /* change guard time */
   usbasp_tpi_send_byte(pgm, TPI_OP_SSTCS(TPIPCR));
   usbasp_tpi_send_byte(pgm, TPIPCR_GT_2b);
@@ -938,6 +1046,9 @@ static int usbasp_tpi_program_enable(PROGRAMMER * pgm, AVRPART * p)
 
 static int usbasp_tpi_chip_erase(PROGRAMMER * pgm, AVRPART * p)
 {
+  if (verbose > 2)
+    fprintf(stderr, "%s: usbasp_tpi_chip_erase()\n", progname);
+
   /* Set PR to flash */
   usbasp_tpi_send_byte(pgm, TPI_OP_SSTPR(0));
   usbasp_tpi_send_byte(pgm, 0x01);
@@ -967,7 +1078,11 @@ static int usbasp_tpi_paged_load(PROGRAMMER * pgm, AVRPART * p, AVRMEM * m,
   uint16_t pr;
 
 
-  dptr = m->buf;
+  if (verbose > 2)
+    fprintf(stderr, "%s: usbasp_tpi_paged_load(\"%s\", 0x%0x, %d)\n",
+	    progname, m->desc, addr, n_bytes);
+
+  dptr = addr + m->buf;
   pr = addr + m->offset;
   readed = 0;
 
@@ -1002,13 +1117,16 @@ static int usbasp_tpi_paged_write(PROGRAMMER * pgm, AVRPART * p, AVRMEM * m,
                                   unsigned int addr, unsigned int n_bytes)
 {
   unsigned char cmd[4];
-  unsigned char dummy[8];
   unsigned char* sptr;
   int writed, clen, n;
   uint16_t pr;
 
 
-  sptr = m->buf;
+  if (verbose > 2)
+    fprintf(stderr, "%s: usbasp_tpi_paged_write(\"%s\", 0x%0x, %d)\n",
+	    progname, m->desc, addr, n_bytes);
+
+  sptr = addr + m->buf;
   pr = addr + m->offset;
   writed = 0;
 
@@ -1017,15 +1135,6 @@ static int usbasp_tpi_paged_write(PROGRAMMER * pgm, AVRPART * p, AVRMEM * m,
   usbasp_tpi_send_byte(pgm, (pr & 0xFF) | 1 );
   usbasp_tpi_send_byte(pgm, TPI_OP_SSTPR(1));
   usbasp_tpi_send_byte(pgm, (pr >> 8) );
-  /* select SECTIONERASE */
-  usbasp_tpi_send_byte(pgm, TPI_OP_SOUT(NVMCMD));
-  usbasp_tpi_send_byte(pgm, NVMCMD_SECTION_ERASE);
-  /* dummy write */
-  usbasp_tpi_send_byte(pgm, TPI_OP_SST);
-  usbasp_tpi_send_byte(pgm, 0x00);
-  usbasp_tpi_nvm_waitbusy(pgm);
-
-  usleep(p->chip_erase_delay);
 
   while(writed < n_bytes)
   {
@@ -1049,28 +1158,6 @@ static int usbasp_tpi_paged_write(PROGRAMMER * pgm, AVRPART * p, AVRMEM * m,
     pr += clen;
     sptr += clen;
   }
-  
-  /* finishing write */
-  while((  clen = (-pr) & (m->page_size-1)  ) != 0)
-  {
-    if(clen > 8)
-      clen = 8;
-
-    memset(dummy, 0xFF, clen);
-
-    cmd[0] = pr & 0xFF;
-    cmd[1] = pr >> 8;
-    cmd[2] = 0;
-    cmd[3] = 0;
-    n = usbasp_transmit(pgm, 0, USBASP_FUNC_TPI_WRITEBLOCK, cmd, dummy, clen);
-    if(n != clen)
-    {
-      fprintf(stderr, "%s: error: wrong count at writing %x\n", progname, n);
-      return -3;
-    }
-
-    pr += clen;
-  }
 
   return n_bytes;
 }
@@ -1085,6 +1172,10 @@ static int usbasp_tpi_read_byte(PROGRAMMER * pgm, AVRPART * p, AVRMEM * m, unsig
   int n;
   uint16_t pr;
 
+
+  if (verbose > 2)
+    fprintf(stderr, "%s: usbasp_tpi_read_byte(\"%s\", 0x%0lx)\n",
+	    progname, m->desc, addr);
 
   pr = m->offset + addr;
 

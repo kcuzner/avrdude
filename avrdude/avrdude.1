@@ -18,7 +18,7 @@
 .\"
 .\" $Id$
 .\"
-.Dd DATE May 16, 2013
+.Dd DATE September 13, 2013
 .Os
 .Dt AVRDUDE 1
 .Sh NAME
@@ -50,8 +50,6 @@
 .Op Fl v
 .Op Fl x Ar extended_param
 .Op Fl V
-.Op Fl y
-.Op Fl Y
 .Sh DESCRIPTION
 .Nm Avrdude
 is a program for downloading code and data to Atmel AVR
@@ -533,6 +531,17 @@ prompt for instructions, unless the terminal is non-interactive, in
 which case safemode is disabled.  See the
 .Fl s
 option to disable safemode prompting.
+.Pp
+If one of the configuration files has a line
+.Dl "default_safemode = no;"
+safemode is disabled by default.
+The
+.Fl u
+option's effect is negated in that case, i. e. it
+.Em enables
+safemode.
+.Pp
+Safemode is always disabled for AVR32, Xmega and TPI devices.
 .It Xo Fl U Ar memtype Ns
 .Ar \&: Ns Ar op Ns
 .Ar \&: Ns Ar filename Ns
@@ -664,6 +673,9 @@ This will only work if
 does not have a colon in it.
 .It Fl v
 Enable verbose output.
+More
+.Fl v
+options increase verbosity level.
 .It Fl V
 Disable automatic verify check when uploading data.
 .It Fl x Ar extended_param
@@ -673,30 +685,6 @@ to the chosen programmer implementation as an extended parameter.
 The interpretation of the extended parameter depends on the
 programmer itself.
 See below for a list of programmers accepting extended parameters.
-.It Fl y
-Tells
-.Nm
-to use the last four bytes of the connected parts' EEPROM memory to
-track the number of times the device has been erased.  When this
-option is used and the
-.Fl e
-flag is specified to generate a chip erase, the previous counter will
-be saved before the chip erase, it is then incremented, and written
-back after the erase cycle completes.  Presumably, the device would
-only be erased just before being programmed, and thus, this can be
-utilized to give an indication of how many erase-rewrite cycles the
-part has undergone.  Since the FLASH memory can only endure a finite
-number of erase-rewrite cycles, one can use this option to track when
-a part is nearing the limit.  The typical limit for Atmel AVR FLASH is
-1000 cycles.  Of course, if the application needs the last four bytes
-of EEPROM memory, this option should not be used.
-.It Fl Y Ar cycles
-Instructs
-.Nm
-to initialize the erase-rewrite cycle counter residing at the last four
-bytes of EEPROM memory to the specified value.  If the application
-needs the last four bytes of EEPROM memory, this option should not be
-used.
 .El
 .Ss Terminal mode
 In this mode,
@@ -803,6 +791,13 @@ Display the current voltage and master oscillator parameters.
 .Pp
 .Em JTAG ICE only:
 Display the current target supply voltage and JTAG bit clock rate/period.
+.It Ar verbose Op Ar level
+Change (when
+.Ar level
+is provided), or display the verbosity level.
+The initial verbosity level is controlled by the number of
+.Fl v
+options given on the commandline.
 .It Ar \&?
 .It Ar help
 Give a short on-line summary of the available commands.

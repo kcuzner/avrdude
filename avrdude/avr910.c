@@ -299,8 +299,8 @@ static void avr910_enable(PROGRAMMER * pgm)
  * transmit an AVR device command and return the results; 'cmd' and
  * 'res' must point to at least a 4 byte data buffer
  */
-static int avr910_cmd(PROGRAMMER * pgm, unsigned char cmd[4], 
-                      unsigned char res[4])
+static int avr910_cmd(PROGRAMMER * pgm, const unsigned char *cmd,
+                      unsigned char *res)
 {
   char buf[5];
 
@@ -612,13 +612,19 @@ static int avr910_paged_write(PROGRAMMER * pgm, AVRPART * p, AVRMEM * m,
     unsigned int max_addr = addr + n_bytes;
     char *cmd;
     unsigned int blocksize = PDATA(pgm)->buffersize;
+    int wr_size;
 
     if (strcmp(m->desc, "flash") && strcmp(m->desc, "eeprom"))
       return -2;
 
-    if (m->desc[0] == 'e')
+    if (m->desc[0] == 'e') {
       blocksize = 1;		/* Write to eeprom single bytes only */
-    avr910_set_addr(pgm, addr);
+      wr_size = 1;
+    } else {
+      wr_size = 2;
+    }
+
+    avr910_set_addr(pgm, addr / wr_size);
 
     cmd = malloc(4 + blocksize);
     if (!cmd) return -1;

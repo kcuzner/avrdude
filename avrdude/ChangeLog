@@ -1,3 +1,366 @@
+2013-10-18  Nils Springob <nils@nicai-systems.de>
+
+        * avrdude.conf.in (atmega1284): ATmega1284 variant added (same as ATmega1284p but with different signature)
+
+2013-09-25  Hannes Weisbach <hannes_weisbach@gmx.net>
+
+	First part of patch #7720:
+	* avrdude.conf.in: Add UM232H and C232H programmers
+
+2013-09-22  Joerg Wunsch <j.gnu@uriah.heep.sax.de>
+
+	Submitted by Daniel Rozsnyo:
+	bug #40085: Typo fix in fuses report (for 6.1-svn-20130917)
+	* main.c: Fix a typo.
+
+2013-09-19  Hannes Weisbach <hannes_weisbach@gmx.net>
+
+	task #12798: Please cleanup #ifdef notyet entries in avrftdi.c
+	* avrftdi.c: ditto.
+	avrftdi.c: Remove DRYRUN-option.
+
+2013-09-17  Joerg Wunsch <j.gnu@uriah.heep.sax.de>
+
+	bug #40055: AVRDUDE segfaults when writing eeprom
+	* main.c: Always clear the UF_AUTO_ERASE flag if either a
+	non-Xmega device was found, or the programmer does not offer a
+	page_erase method.
+
+2013-09-17  Joerg Wunsch <j.gnu@uriah.heep.sax.de>
+
+	* configure.ac (AC_INIT): Bump version to post-6.0.
+
+2013-09-17  Joerg Wunsch <j.gnu@uriah.heep.sax.de>
+
+	* configure.ac (AC_INIT): Bump version to 6.0.
+
+2013-09-17  Joerg Wunsch <j.gnu@uriah.heep.sax.de>
+
+	* jtag3.c (jtag3_initialize): Fix a buffer overflow by limiting
+	the flash page cache size to at most "readsize".  For Xmegas with
+	a page size of 512 bytes, the maximum USB packet size was
+	overflowed, and subsequently, a memmove copied beyond the end of
+	the allocated buffer.
+	* jtag3.c (jtag3_read_byte): Add the correct offset also for the
+	various flash regions, so reading the apptable or boot regions
+	yields the correct data.
+
+2013-09-16  Joerg Wunsch <j.gnu@uriah.heep.sax.de>
+
+	Submitted by Joakim Lubeck:
+	bug #40040: Support for ATtiny20 and ATtiny40
+	* avrdude.conf.in: Restructure the reduced-core tiny devices
+	to use a common entry .reduced_core_tiny; add ATtiny20 and
+	ATtiny40
+
+2013-09-15  Joerg Wunsch <j.gnu@uriah.heep.sax.de>
+
+	Submitted by Joakim Lubeck:
+	bug #40033: Support for the XMegaE5 family
+	* avrdude.conf.in (ATxmega8E5, ATxmega16E5, ATxmega32E5): New
+	entries.
+
+2013-09-13  Joerg Wunsch <j.gnu@uriah.heep.sax.de>
+
+	* stk500v2.c (stk500v2_set_sck_period): Revamp this to match the
+	description/pseudo-code in appnote AVR068.
+
+2013-09-13  Joerg Wunsch <j.gnu@uriah.heep.sax.de>
+
+	Submitted by Stephen Roe:
+	patch #7710: usb_libusb: Check VID/PID before opening device
+	* usb_libusb.c (usbdev_open): Swap the sequence of verifying the
+	VID:PID, and opening the device.
+
+2013-09-13  Joerg Wunsch <j.gnu@uriah.heep.sax.de>
+
+	patch #8176: butterfly.c (AVR109 protocol implementation) clean-up and bug-fixing
+	* butterfly.c (butterfly_page_erase): Add dummy function to avoid
+	segfault when writing to EEPROM.
+
+2013-09-13  Joerg Wunsch <j.gnu@uriah.heep.sax.de>
+
+	bug #35474 Feature request: print fuse values in safemode output
+	* config_gram.y: New configuration token "default_safemode".
+	* lexer.l: (Dito.)
+	* avrdude.conf.in: (Dito.)
+	* config.h: Add variable default_safemode.
+	* config.c: (Dito.)
+	* main.c: Handle default_safemode, including -u option.
+	* avrdude.1: Document all this.
+	* doc/avrdude.texi: (Dito.)
+
+2013-09-13  Joerg Wunsch <j.gnu@uriah.heep.sax.de>
+
+	Submitted by HubertB:
+	patch #7657 Add ATmega406 support for avrdude using DRAGON + JTAG
+	* avrdude.conf.in (ATmega406): New entry.
+
+2013-09-13  Joerg Wunsch <j.gnu@uriah.heep.sax.de>
+
+	Submitted by Marc de Hoop:
+	patch #7606 ATtiny43u support
+	* avrdude.conf.in (ATtiny43U): New entry.
+
+2013-09-13  Joerg Wunsch <j.gnu@uriah.heep.sax.de>
+
+	patch #5708 avrdude should make 10 synchronization attempts instead of just one
+	* stk500.c (stk500_getsync): Loop 10 times trying to get in
+	sync with the programmer.
+
+2013-09-13  Joerg Wunsch <j.gnu@uriah.heep.sax.de>
+
+	Contributed by Ricardo Martins:
+	bug #36384 ATxmega32A4 usersig size
+	* avrdude.conf.in: Revamp all the ATxmega* entries.  Add new
+	entries for ATxmega128A1U, ATxmega128A3U, ATxmega128A4U,
+	ATxmega128B1, ATxmega128B3, ATxmega128C3, ATxmega128D3,
+	ATxmega16A4U, ATxmega16C4, ATxmega192A3U, ATxmega192C3,
+	ATxmega192D3, ATxmega256A3BU, ATxmega256A3U, ATxmega256C3,
+	ATxmega256D3, ATxmega32A4U, ATxmega32C4, ATxmega384C3,
+	ATxmega384D3, ATxmega64A1U, ATxmega64A3U, ATxmega64A4U,
+	ATxmega64B1, ATxmega64B3, ATxmega64C3, ATxmega64D3
+
+2013-09-13  Joerg Wunsch <j.gnu@uriah.heep.sax.de>
+
+	bug #35456 The progress bar for STK500V2 programmer is "wrong".
+	* avr.c (avr_read, avr_write): Change the progress reporting for
+	paged read/write from per-address to per-considered-page.  This
+	ought to give a realistic estimation about the time still to be
+	spent.
+
+2013-09-13  Joerg Wunsch <j.gnu@uriah.heep.sax.de>
+
+	bug #34277: avrdude reads wrong byte order if using avr911 (aka butterfly)
+	* butterfly.c (butterfly_read_byte_flash): Swap bytes received.
+
+2013-09-12  Joerg Wunsch <j.gnu@uriah.heep.sax.de>
+
+	bug #37768 Poll usbtiny 100 times at init time to handle low-clock devices
+	* doc/avrdude.texi: Add a FAQ entry about how to connect to a
+	target where the firmware has reduced the internal clock speed.
+
+2013-09-11  Joerg Wunsch <j.gnu@uriah.heep.sax.de>
+
+	bug #28344 chip_erase_delay too short for ATmega324P, 644, 644P, and 1284P
+	* avrdude.conf: Bump the chip_erase_delay for all ATmega*4 devices
+	to 55 ms.  While the datasheet still claims 9 ms, all the XML files
+	tell either 45 or 55 ms, depending on STK600 or not.
+
+2013-09-11  Joerg Wunsch <j.gnu@uriah.heep.sax.de>
+
+	* fileio.c (fileio): Don't exit(1) if something goes wrong; return
+	-1 instead.  Don't refer to obsolete option -f to specify the file
+	format.
+
+2013-09-10  Joerg Wunsch <j.gnu@uriah.heep.sax.de>
+
+	Submitted by Matthias Trute:
+	bug #36901 flashing Atmega32U4 EEPROM produces garbage on chip
+	* avrdude.conf.in (ATmega32U4): Fix EEPROM pagesize to 4, the
+	datasheet is wrong here.
+
+2013-09-09  Joerg Wunsch <j.gnu@uriah.heep.sax.de>
+
+	* configure.ac: check for ar and ranlib in the target tool
+	namespace, rather than on the host.
+
+2013-09-08  Joerg Wunsch <j.gnu@uriah.heep.sax.de>
+
+	Fix byte-wise EEPROM and flash writes on Xmega
+	* jtagmkII_private.h (MTYPE_EEPROM_XMEGA): New memory type.
+	* jtagmkII.c (jtagmkII_write_byte): For Xmega EEPROM, use
+	memory type MTYPE_EEPROM_XMEGA; for flash writes, always
+	write 2 bytes starting on an even address.
+
+2013-09-08  Joerg Wunsch <j.gnu@uriah.heep.sax.de>
+
+	* term.c: Implement the "verbose" terminal mode command.
+	* avrdude.1: Document this.
+	* doc/avrdude.texi: (Dito.)
+
+2013-09-07  Joerg Wunsch <j.gnu@uriah.heep.sax.de>
+
+	* jtag3.c (jtag3_write_byte): Do not attempt to start the paged
+	algorithm for EEPROM when being connected through debugWIRE.
+
+2013-09-06  Joerg Wunsch <j.gnu@uriah.heep.sax.de>
+
+	Extend the single-byte algorithm to all devices, both flash and
+	EEPROM.  (Flash cells must have been erased before though.)
+	* jtag3.c (jtag3_initialize): OCDEN no longer needs to be
+	considered; a session with "programming" purpose is sufficient
+	* jtag3.c (jtag3_write_byte): Use the paged algorithm for all
+	flash and EEPROM areas, not just Xmega.
+
+2013-09-05  Joerg Wunsch <j.gnu@uriah.heep.sax.de>
+
+	Fix single-byte EEPROM updates on Xmega:
+	* jtag3_private.h (MTYPE_EEPROM_XMEGA): New define.
+	* jtag3.c (jtag3_write_byte): When updating flash or
+	EEPROM on Xmega devices, resort to jtag3_paged_write()
+	after filling and modifying the page cache.
+	* jtag3.c (jtag3_paged_write): use MTYPE_EEPROM_XMEGA
+	where appropriate.
+	* jtag3.c (jtag3_initialize): Open with debugging intent
+	for Xmega devices, so single-byte EEPROM updates will
+	work.
+
+2013-09-04  Joerg Wunsch <j.gnu@uriah.heep.sax.de>
+
+	Submitted by Matthias Neeracher:
+	bug #38732: Support for ATtiny1634
+	* avrdude.conf.in (ATtiny1634): New entry.
+
+2013-09-03  Joerg Wunsch <j.gnu@uriah.heep.sax.de>
+
+	Submitted by Brane Ždralo:
+	patch #7769: Write flash fails for AVR910 programmers
+	* avr910.c (avr910_paged_write): Fix flash addresses in
+	'A' command.
+
+2013-09-03  Joerg Wunsch <j.gnu@uriah.heep.sax.de>
+
+	Submitted by Fred (magister):
+	bug #38951: AVR109 use byte offset instead of word offset
+	patch #8045: AVR109 butterfly failing
+	* butterfly.c (butterfly_paged_load, butterfly_paged_write):
+	fix calculation of 'A' address when operating on flash memory.
+	It must be given in terms of 16-bit words rather than bytes.
+
+2013-09-03  Rene Liebscher <R.Liebscher@gmx.de>
+
+	* avrftdi.c, avrftdi_private.h: added tx buffer size, and use
+	smaller block sizes as larger sometimes hang
+
+2013-09-03  Joerg Wunsch <j.gnu@uriah.heep.sax.de>
+
+	* avrdude.h: Remove the erase cycle counter (options -y / -Y).
+	* avr.c: (Dito.)
+	* main.c: (Dito.)
+	* avrdude.1: Undocument -y / -Y.
+	* doc/avrdude.texi: (Dito.)
+
+2013-09-03  Joerg Wunsch <j.gnu@uriah.heep.sax.de>
+
+	bug #39691 Buffer overrun when reading EEPROM byte with JTAGICE3
+	* jtag3.c (jtag3_initialize): initialize the eeprom_pagesize
+	private attribute so the page cache will actually be usable
+
+2013-09-03  Joerg Wunsch <j.gnu@uriah.heep.sax.de>
+
+	bug #38580 Current svn head, xmega and fuses, all fuses tied to fuse0
+	* jtag3.c (jtag3_read_byte, jtag3_write_byte): Correctly apply the
+	relevant part of mem->offset as the address to operate on.
+
+2013-09-03  Joerg Wunsch <j.gnu@uriah.heep.sax.de>
+
+	* fileio.c: Fix "unused variable" warnings.
+	* avr.c: (Dito.)
+	* stk500v2.c: (Dito.)
+	* stk500.c: (Dito.)
+	* jtagmkII.c: (Dito.)
+	* term.c: (Dito.)
+	* ser_posix.c: (Dito.)
+
+2013-09-02  Joerg Wunsch <j.gnu@uriah.heep.sax.de>
+
+	Submitted by Travis Griggs:
+	bug #38307: Can't write usersig of an xmega256a3
+	* stk500v2.c (stk600_xprog_page_erase): allow erasing the usersig space.
+
+2013-09-02  Joerg Wunsch <j.gnu@uriah.heep.sax.de>
+
+	Submitted by Robert Niemi:
+	bug #35800: Compilation error on certain systems if parport is disabled
+	* linux_ppdev.h: Conditionalize inclusion of <linux/parport.h> and
+	<linux/ppdev.h> on HAVE_PARPORT
+
+2013-09-02  Joerg Wunsch <j.gnu@uriah.heep.sax.de>
+
+	bug #39794: warnings when building avrdude 6.0rc1 under CentOS 6.4
+	* pickit.c (usb_open_device): Use %p rather than %X to print "handle"
+	which is a pointer
+	* jtag3.c (jtag3_initialize): Initialize "flashsize" to be sure it
+	proceeds with a valid value.
+
+2013-09-02  Joerg Wunsch <j.gnu@uriah.heep.sax.de>
+
+	bug #39794: warnings when building avrdude 6.0rc1 under CentOS 6.4
+	* buspirate.c: Turn the "cmd" argument of the various methods into
+	a "const unsigned char *"; while doing this, declare all arrays being
+	passed as arguments to be pointers rather than arrays, as the latter
+	obfuscates the way arrays are being passed to a callee in C.
+	* avrftdi.c: (Dito.)
+	* pickit2.c: (Dito.)
+	* ft245r.c: (Dito.)
+	* avr910.c: (Dito.)
+	* stk500.c: (Dito.)
+	* bitbang.c: (Dito.)
+	* bitbang.h: (Dito.)
+	* avrftdi_tpi.c: (Dito.)
+	* avrftdi_tpi.h: (Dito.)
+	* usbasp.c: (Dito.)
+	* stk500v2.c: (Dito.)
+	* pgm.h: (Dito.)
+	* usbtiny.c: (Dito.)
+
+2013-09-02  Joerg Wunsch <j.gnu@uriah.heep.sax.de>
+
+	bug #38023: avrdude doesn't return an error code when attempting
+	to upload an invalid Intel HEX file
+	* fileio.c (ihex2b): Turn the "No end of file record found" warning
+	into an error if no valid record was found at all.
+
+2013-09-02  Joerg Wunsch <j.gnu@uriah.heep.sax.de>
+
+	Submitted by Claus-Justus Heine:
+	bug #38713: Compilation of the documentation breaks with texinfo-5
+	* doc/avrdude.texi: Turn @itemx into @item, add @headitem to STK600
+	Routing/Socket card table
+
+2013-09-02  Joerg Wunsch <j.gnu@uriah.heep.sax.de>
+
+	* usbasp.c: Add trace output for -vvv to non-TPI functions, too.
+
+2013-09-01  Joerg Wunsch <j.gnu@uriah.heep.sax.de>
+
+	* usbasp.c (usbasp_tpi_paged_load): Calculate correct
+	buffer address.
+	* usbasp.c (usbasp_tpi_paged_write): Calculate correct
+	buffer address; don't issue a SECTION_ERASE command for
+	each page (a CHIP_ERASE has been done before anyway);
+	remove the code that attempted to handle partial page
+	writes, as all writes are now done with a full page.
+
+2013-09-01  Joerg Wunsch <j.gnu@uriah.heep.sax.de>
+
+	* usbasp.c: Add more trace output, by now only for the TPI
+	functions.
+
+2013-08-31  Joerg Wunsch <j.gnu@uriah.heep.sax.de>
+
+	* usbasp.c (usbasp_transmit): Add -vvvv trace output.
+
+2013-08-30  Joerg Wunsch <j.gnu@uriah.heep.sax.de>
+
+	bug #39893: Verification failure with AVRISPmkII and Xmega
+	* stk500v2.c (stk600_xprog_page_erase): Fix argument that is
+	passed to stk600_xprog_memtype()
+
+2013-07-11  Joerg Wunsch <j.gnu@uriah.heep.sax.de>
+
+	* fileio.c (elf2b): replace elf_getshstrndx() by
+	elf_getshdrstrndx() as the former one is deprecated
+
+2013-06-19  Rene Liebscher <R.Liebscher@gmx.de>
+
+	use bitbanging on ftdi mpsse when wrong pins are used
+	* avrftdi.c, avrftdi_private.h: added additional pin check 
+	and bitbanging fallback
+	* pindefs.[ch]: added a flag to enable/disable output
+	* ft245r.c: changes because of added flag above
+
 2013-05-17  Joerg Wunsch <j.gnu@uriah.heep.sax.de>
 
 	Submitted by "Malte" and John McCorquodale:
