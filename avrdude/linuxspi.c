@@ -17,6 +17,8 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ * 
+ * Support for inversion of reset pin, Tim Chilton 02/05/2014
  */
  
 #include "linuxspi.h"
@@ -141,7 +143,8 @@ static int linuxspi_spi_duplex(PROGRAMMER* pgm, unsigned char* tx, unsigned char
 static int linuxspi_gpio_op_wr(PROGRAMMER* pgm, LINUXSPI_GPIO_OP op, int gpio, char* val)
 {
     char* fn = malloc(PATH_MAX); //filename
-    
+    gpio &= ~PIN_INVERSE; // Remove the inversion flag
+
     switch(op)
     {
         case LINUXSPI_GPIO_DIRECTION:
@@ -213,10 +216,10 @@ static int linuxspi_open(PROGRAMMER* pgm, char* port)
         fprintf(stderr, "%s: error: No pin assigned to AVR RESET.\n", progname);
         exit(1);
     }
-    
+
     //export reset pin
     buf = malloc(32);
-    sprintf(buf, "%d", pgm->pinno[PIN_AVR_RESET]);
+    sprintf(buf, "%d", pgm->pinno[PIN_AVR_RESET] &~PIN_INVERSE);
     if (linuxspi_gpio_op_wr(pgm, LINUXSPI_GPIO_EXPORT, pgm->pinno[PIN_AVR_RESET], buf) < 0)
     {
         free(buf);
@@ -224,18 +227,13 @@ static int linuxspi_open(PROGRAMMER* pgm, char* port)
     }
     free(buf);
     
-    //set reset to output
-    if (linuxspi_gpio_op_wr(pgm, LINUXSPI_GPIO_DIRECTION, pgm->pinno[PIN_AVR_RESET], "out") < 0)
+    //set reset to output active and write initial value at same time
+    //this prevents glitches https://www.kernel.org/doc/Documentation/gpio/sysfs.txt
+    if (linuxspi_gpio_op_wr(pgm, LINUXSPI_GPIO_DIRECTION, pgm->pinno[PIN_AVR_RESET], pgm->pinno[PIN_AVR_RESET]&PIN_INVERSE ? "high" : "low") < 0)
     {
         return -1;
     }
     
-    //set reset low
-    if (linuxspi_gpio_op_wr(pgm, LINUXSPI_GPIO_VALUE, pgm->pinno[PIN_AVR_RESET], "0") < 0)
-    {
-        return -1;
-    }
-        
     //save the port to our data
     strcpy(pgm->port, port);
     
