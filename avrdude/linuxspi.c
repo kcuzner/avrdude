@@ -62,7 +62,7 @@
 
 struct pdata
 {
-    unsigned int speedHz;
+    int port_fd;
 };
 
 typedef enum {
@@ -105,25 +105,17 @@ static int linuxspi_chip_erase(PROGRAMMER * pgm, AVRPART * p);
  */
 static int linuxspi_spi_duplex(PROGRAMMER* pgm, unsigned char* tx, unsigned char* rx, int len)
 {
-    int fd = open(pgm->port, O_RDWR);
-    if (fd < 0)
-    {
-        fprintf(stderr, "\n%s: error: Unable to open SPI port %s", progname, pgm->port);
-        return -1; //error
-    }
-    
+    IMPORT_PDATA(pgm);
     struct spi_ioc_transfer tr = {
         .tx_buf = (unsigned long)tx,
         .rx_buf = (unsigned long)rx,
         .len = len,
-        .delay_usecs = 1,
-        //should settle around 400Khz, a standard SPI speed. Adjust using baud parameter (-b)
-        .speed_hz = pgm->baudrate == 0 ? 400000 : pgm->baudrate,
-        .bits_per_word = 8,
+        .delay_usecs = 0,
+        .speed_hz = 0,
+        .bits_per_word = 0,
     };
     
-    int ret = ioctl(fd, SPI_IOC_MESSAGE(1), &tr);
-    close(fd);
+    int ret = ioctl(pdata->port_fd, SPI_IOC_MESSAGE(1), &tr);
     
     if (ret != len)
     {
@@ -202,7 +194,8 @@ static void linuxspi_teardown(PROGRAMMER* pgm)
 }
 
 static int linuxspi_open(PROGRAMMER* pgm, char* port)
-{   
+{
+    IMPORT_PDATA(pgm);
     char* buf;
     
     if (port == 0 || strcmp(port, "unknown") == 0) //unknown port
@@ -236,14 +229,56 @@ static int linuxspi_open(PROGRAMMER* pgm, char* port)
     
     //save the port to our data
     strcpy(pgm->port, port);
+
+    pdata->port_fd = open(port, O_RDWR);
+    if (pdata->port_fd < 0)
+    {
+        fprintf(stderr, "\n%s: error: Unable to open SPI port %s", progname, port);
+        return -1; //error
+    }
+    else
+    {
+        long baud;
+        unsigned char mode = SPI_MODE_0;
+        unsigned char bits = 8;
+
+        // Default SPI speed of 400KHz. Adjust using baud parameter (-b)
+        baud = pgm->baudrate;
+        if (baud == 0)
+            baud = 400000;
+
+        if (ioctl(pdata->port_fd, SPI_IOC_WR_MODE, &mode) == -1)
+        {
+          fprintf(stderr, "can't set SPI mode\n");
+          return -1;
+        }
+        if (ioctl(pdata->port_fd, SPI_IOC_WR_BITS_PER_WORD, &bits) == -1)
+        {
+          fprintf(stderr, "can't set SPI bits\n");
+          return -1;
+        }
+        if (ioctl(pdata->port_fd, SPI_IOC_WR_MAX_SPEED_HZ, &baud) == -1)
+        {
+          fprintf(stderr, "can't set SPI speed\n");
+          return -1;
+        }
+    }
     
     return 0;
 }
 
 static void linuxspi_close(PROGRAMMER* pgm)
 {
+    IMPORT_PDATA(pgm);
     char* buf;
-    
+
+    // Close SPI device
+    if (pdata->port_fd >= 0)
+    {
+        close(pdata->port_fd);
+        pdata->port_fd = -1;
+    }
+
     //set reset to input
     linuxspi_gpio_op_wr(pgm, LINUXSPI_GPIO_DIRECTION, pgm->pinno[PIN_AVR_RESET], "in");
     
