@@ -167,7 +167,7 @@ static int linuxspi_gpio_op_wr(PROGRAMMER* pgm, LINUXSPI_GPIO_OP op, int gpio, c
     FILE* f = fopen(fn, "w");
     
     int fopen_retries = 0;
-    while (!f && fopen_retries < 100)
+    while (!f && (fopen_retries < 100))
     {
         usleep(20000);
         f = fopen(fn, "w");
