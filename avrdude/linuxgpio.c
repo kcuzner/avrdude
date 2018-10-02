@@ -258,12 +258,12 @@ static int linuxgpio_open(PROGRAMMER *pgm, char *port)
   //mostry LED status, can't be set to GPIO0. It can be fixed when a better 
   //solution exists.
   for (i=0; i<N_PINS; i++) {
-    if ( pgm->pinno[i] != 0 ||
+    pin = pgm->pinno[i] & PIN_MASK;
+    if ( pin != 0 ||
          i == PIN_AVR_RESET ||
          i == PIN_AVR_SCK   ||
          i == PIN_AVR_MOSI  ||
          i == PIN_AVR_MISO ) {
-        pin = pgm->pinno[i] & PIN_MASK;
         if ((r=linuxgpio_export(pin)) < 0) {
             fprintf(stderr, "Can't export GPIO %d, already exported/busy?: %s",
                     pin, strerror(errno));
