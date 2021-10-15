@@ -75,6 +75,8 @@ typedef enum {
 #define PDATA(pgm) ((struct pdata *)(pgm->cookie))
 #define IMPORT_PDATA(pgm) struct pdata *pdata = PDATA(pgm)
 
+static int need_unexport;      /* set to non-0 if we exported the GPIO pin */
+
 /**
  * Function Prototypes
  */
@@ -194,6 +196,20 @@ static int linuxspi_gpio_op_wr(PROGRAMMER* pgm, LINUXSPI_GPIO_OP op, int gpio, c
     return 0;
 }
 
+/**
+ * @brief Checks if the given port is already exported
+ * @param gpio port to check
+ * @return 0 if port is not exported, non-0 if port is exported
+ */
+static int linuxspi_gpio_is_exported(int gpio)
+{
+    char path[PATH_MAX];
+
+    snprintf(path, PATH_MAX, "/sys/class/gpio/gpio%d", gpio);
+
+    return access(path, F_OK) == 0;
+}
+
 static void linuxspi_setup(PROGRAMMER* pgm)
 {
     if ((pgm->cookie = malloc(sizeof(struct pdata))) == 0)
@@ -225,21 +241,27 @@ static int linuxspi_open(PROGRAMMER* pgm, char* port)
         exit(1);
     }
 
-    //export reset pin
-    buf = malloc(32);
-    sprintf(buf, "%d", pgm->pinno[PIN_AVR_RESET] &~PIN_INVERSE);
-    if (linuxspi_gpio_op_wr(pgm, LINUXSPI_GPIO_EXPORT, pgm->pinno[PIN_AVR_RESET], buf) < 0)
+    if (!linuxspi_gpio_is_exported(pgm->pinno[PIN_AVR_RESET]))
     {
-        free(buf);
-        return -1;
+       need_unexport = 1;
+
+       //export reset pin
+       buf = malloc(32);
+       sprintf(buf, "%d", pgm->pinno[PIN_AVR_RESET] &~PIN_INVERSE);
+       if (linuxspi_gpio_op_wr(pgm, LINUXSPI_GPIO_EXPORT, pgm->pinno[PIN_AVR_RESET], buf) < 0)
+       {
+           free(buf);
+           return -1;
+       }
+       free(buf);
+       sleep(1);
     }
-    free(buf);
-    
+       
     //set reset to output active and write initial value at same time
     //this prevents glitches https://www.kernel.org/doc/Documentation/gpio/sysfs.txt
     if (linuxspi_gpio_op_wr(pgm, LINUXSPI_GPIO_DIRECTION, pgm->pinno[PIN_AVR_RESET], pgm->pinno[PIN_AVR_RESET]&PIN_INVERSE ? "high" : "low") < 0)
     {
-        return -1;
+       return -1;
     }
     
     //save the port to our data
@@ -255,10 +277,13 @@ static void linuxspi_close(PROGRAMMER* pgm)
     //set reset to input
     linuxspi_gpio_op_wr(pgm, LINUXSPI_GPIO_DIRECTION, pgm->pinno[PIN_AVR_RESET], "in");
     
-    //unexport reset
-    buf = malloc(32);
-    sprintf(buf, "%d", pgm->pinno[PIN_AVR_RESET]);
-    linuxspi_gpio_op_wr(pgm, LINUXSPI_GPIO_UNEXPORT, pgm->pinno[PIN_AVR_RESET], buf);
+    if (need_unexport)
+    {
+       //unexport reset
+       buf = malloc(32);
+       sprintf(buf, "%d", pgm->pinno[PIN_AVR_RESET]);
+       linuxspi_gpio_op_wr(pgm, LINUXSPI_GPIO_UNEXPORT, pgm->pinno[PIN_AVR_RESET], buf);
+    }
 }
 
 static void linuxspi_disable(PROGRAMMER* pgm)
